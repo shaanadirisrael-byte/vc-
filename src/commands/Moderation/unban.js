@@ -1,71 +1,54 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { PermissionFlagsBits } from 'discord.js';
 import { successEmbed } from '../../utils/embeds.js';
-import { logger } from '../../utils/logger.js';
-import { ModerationService } from '../../services/moderation/moderationService.js';
-import { replyUserError, ErrorTypes } from '../../utils/errorHandler.js';
-import { InteractionHelper } from '../../utils/interactionHelper.js';
+import { TitanBotError, ErrorTypes } from '../../utils/errorHandler.js';
 
 export default {
-    data: new SlashCommandBuilder()
-        .setName("unban")
-        .setDescription("Unban a user from the server")
-        .addStringOption(option =>
-            option
-                .setName("target")
-                .setDescription("The ID (or mention) of the user to unban")
-                .setRequired(true),
-        )
-        .addStringOption(option =>
-            option.setName("reason")
-                .setDescription("Reason for the unban")
-                .setRequired(false),
-        )
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
-    category: "moderation",
+    name: 'unban',
+    description: 'Unban a user',
+    category: 'moderation',
+    permissions: [PermissionFlagsBits.BanMembers],
 
-    async execute(interaction, config, client) {
-        const deferSuccess = await InteractionHelper.safeDefer(interaction);
-        if (!deferSuccess) {
-            logger.warn(`Unban interaction defer failed`, {
-                userId: interaction.user.id,
-                guildId: interaction.guildId,
-                commandName: 'unban',
-            });
-            return;
+    async execute(message, args, config, client) {
+        const userId = args[0];
+
+        if (!userId) {
+            throw new TitanBotError(
+                'Missing user ID',
+                ErrorTypes.USER_INPUT,
+                'Use: `-unban <user ID>`'
+            );
         }
 
-        const rawTarget = interaction.options.getString("target");
-        const targetId = rawTarget.replace(/[<@!>]/g, '').trim();
+        let user;
 
-        if (!/^\d{17,20}$/.test(targetId)) {
-            return replyUserError(interaction, {
-                type: ErrorTypes.USER_INPUT,
-                message: 'Please provide a valid user ID or mention.',
-            });
+        try {
+            user = await client.users.fetch(userId);
+        } catch {
+            throw new TitanBotError(
+                'Invalid user',
+                ErrorTypes.USER_INPUT,
+                'That user ID is invalid.'
+            );
         }
 
-        const targetUser = await client.users.fetch(targetId).catch(() => null);
-        if (!targetUser) {
-            return replyUserError(interaction, {
-                type: ErrorTypes.USER_INPUT,
-                message: `Could not find a user with the ID \`${targetId}\`.`,
-            });
+        try {
+            await message.guild.members.unban(
+                user.id,
+                `Unbanned by ${message.author.tag}`
+            );
+        } catch {
+            throw new TitanBotError(
+                'User not banned',
+                ErrorTypes.VALIDATION,
+                'That user is not currently banned.'
+            );
         }
 
-        const reason = interaction.options.getString("reason") || "No reason provided";
-
-        const result = await ModerationService.unbanUser({
-            guild: interaction.guild,
-            user: targetUser,
-            moderator: interaction.member,
-            reason,
-        });
-
-        await InteractionHelper.safeEditReply(interaction, {
+        await message.channel.send({
             embeds: [
                 successEmbed(
-                    "✅ User Unbanned",
-                    `Successfully unbanned **${targetUser.tag}** from the server.\n\n**Reason:** ${reason}\n**Case ID:** #${result.caseId}`,
+                    `🔓 **Unbanned** ${user.tag}`,
+                    `**Moderator:** ${message.author}`
                 ),
             ],
         });
