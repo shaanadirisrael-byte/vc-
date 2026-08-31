@@ -1,181 +1,384 @@
-import {
-    SlashCommandBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-} from "discord.js";
-import { InteractionHelper } from '../../utils/interactionHelper.js';
-import { createEmbed } from "../../utils/embeds.js";
-import {
-    createSelectMenu,
-} from "../../utils/components.js";
-import fs from "fs/promises";
-import path from "path";
-import { fileURLToPath } from "url";
+```python
+import discord
+from discord.ext import commands
+import time
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+# =========================
+# BOT SETUP
+# =========================
 
-const CATEGORY_SELECT_ID = "help-category-select";
-const ALL_COMMANDS_ID = "help-all-commands";
-const BUG_REPORT_BUTTON_ID = "help-bug-report";
-const HELP_MENU_TIMEOUT_MS = 5 * 60 * 1000;
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
 
-const CATEGORY_ICONS = {
-    Core: "ℹ️",
-    Moderation: "🛡️",
-    Economy: "💰",
-    Music: "🎵",
-    Fun: "🎮",
-    Leveling: "📊",
-    Utility: "🔧",
-    Ticket: "🎫",
-    Welcome: "👋",
-    Giveaway: "🎉",
-    Counter: "🔢",
-    Tools: "🛠️",
-    Search: "🔍",
-    "Reaction Roles": "🎭",
-    Community: "👥",
-    Birthday: "🎂",
-    "Join To Create": "🔌",
-    Verification: "✅",
-};
+bot = commands.Bot(
+    command_prefix="-",
+    intents=intents,
+    help_command=None
+)
 
-function formatCategoryName(rawCategory) {
-    return rawCategory
-        .replace(/_/g, '')
-        .replace(/([a-z])([A-Z])/g, '$1 $2')
-        .replace(/\b\w/g, (char) => char.toUpperCase());
-}
+start_time = time.time()
 
-export async function createInitialHelpMenu(client) {
-    const commandsPath = path.join(__dirname, "../../commands");
-    const categoryDirs = (
-        await fs.readdir(commandsPath, { withFileTypes: true })
+
+# =========================
+# READY
+# =========================
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+    print(f"📡 Connected to {len(bot.guilds)} server(s)")
+
+
+# =========================
+# PING
+# =========================
+
+@bot.command()
+async def ping(ctx):
+    ms = round(bot.latency * 1000)
+    await ctx.send(f"🏓 Pong! `{ms}ms`")
+
+
+# =========================
+# UPTIME
+# =========================
+
+@bot.command()
+async def uptime(ctx):
+    seconds = int(time.time() - start_time)
+
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    await ctx.send(
+        f"⏱️ **Bot Uptime**\n"
+        f"`{hours}h {minutes}m {seconds}s`"
     )
-        .filter((dirent) => dirent.isDirectory())
-        .map((dirent) => dirent.name)
-        .sort();
 
-    const options = [
-        {
-            label: "📋 All Commands",
-            description: "Browse every available command in a single list",
-            value: ALL_COMMANDS_ID,
-        },
-        ...categoryDirs.map((category) => {
-            const categoryName = formatCategoryName(category);
-            const icon = CATEGORY_ICONS[categoryName] || "🔍";
-            return {
-                label: `${icon} ${categoryName}`,
-                description: `View commands in the ${categoryName} category`,
-                value: category,
-            };
-        }),
-    ];
 
-    const botName = client?.user?.username || "Bot";
-    const embed = createEmbed({
-        title: `📖 ${botName} Help`,
-        description: 'Set up your server, pick what to enable, then browse commands below.',
-        color: 'primary',
-        thumbnail: client.user?.displayAvatarURL?.({ size: 1024 }),
-        fields: [
-            {
-                name: '🚀 Getting Started',
-                value: [
-                    '**1. Launch setup** — Run `/configwizard` to configure prefix, mod role, and logs.',
-                    '**2. Enable systems** — Use `/commands dashboard` to turn categories on or off.',                    '**3. Browse commands** — Use the menu below to view categories and commands.',
-                ].join('\n'),
-                inline: false,
-            },
-            {
-                name: 'ℹ️ How It Works',
-                value: [
-                    '• Dashboard commands manage each feature visually',
-                    '• Settings are saved per server',
-                    '• Slash commands and prefixes both work once enabled',
-                ].join('\n'),
-                inline: false,
-            },
-            {
-                name: '\u200B',
-                value: `-# ${botName} is [open source](https://youtu.be/1jCZX8s3bJE?si=NPOYx-vxVE1I5vJK)`,
-                inline: false,
-            },
-        ],
-    });
+# =========================
+# SERVER INFO
+# =========================
 
-    embed.setFooter({ 
-        text: "Made with ❤️" 
-    });
-    embed.setTimestamp();
+@bot.command()
+async def server(ctx):
+    guild = ctx.guild
 
-    const bugReportButton = new ButtonBuilder()
-        .setCustomId(BUG_REPORT_BUTTON_ID)
-        .setLabel("Report Bug")
-        .setStyle(ButtonStyle.Danger);
+    embed = discord.Embed(
+        title=f"🏠 {guild.name}",
+        description="Server information"
+    )
 
-    const supportButton = new ButtonBuilder()
-        .setLabel("Support Server")
-        .setURL("https://discord.gg/QnWNz2dKCE")
-        .setStyle(ButtonStyle.Link);
+    embed.add_field(
+        name="👥 Members",
+        value=str(guild.member_count),
+        inline=True
+    )
 
-    const selectRow = createSelectMenu(
-        CATEGORY_SELECT_ID,
-        "Select to view the commands",
-        options,
-    );
+    embed.add_field(
+        name="👑 Owner",
+        value=guild.owner.mention if guild.owner else "Unknown",
+        inline=True
+    )
 
-    const buttonRow = new ActionRowBuilder().addComponents([
-        bugReportButton,
-        supportButton,
-    ]);
+    embed.add_field(
+        name="💬 Channels",
+        value=str(len(guild.channels)),
+        inline=True
+    )
 
-    return {
-        embeds: [embed],
-        components: [buttonRow, selectRow],
-    };
-}
+    embed.add_field(
+        name="🆔 Server ID",
+        value=str(guild.id),
+        inline=False
+    )
 
-export default {
-    slashOnly: true,
-    data: new SlashCommandBuilder()
-        .setName("help")
-        .setDescription("Displays the help menu with all available commands"),
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
 
-    async execute(interaction, guildConfig, client) {
-        
-        const { MessageFlags } = await import('discord.js');
-        await InteractionHelper.safeDefer(interaction);
-        
-        const { embeds, components } = await createInitialHelpMenu(client);
+    await ctx.send(embed=embed)
 
-        await InteractionHelper.safeEditReply(interaction, {
-            embeds,
-            components,
-        });
 
-        setTimeout(async () => {
-            try {
-                if (!InteractionHelper.isInteractionValid(interaction)) {
-                    return;
-                }
+# =========================
+# USER INFO
+# =========================
 
-                const closedEmbed = createEmbed({
-                    title: "Help menu closed",
-                    description: "Help menu has been closed, use /help again.",
-                    color: "secondary",
-                });
+@bot.command()
+async def user(ctx, member: discord.Member = None):
+    member = member or ctx.author
 
-                await InteractionHelper.safeEditReply(interaction, {
-                    embeds: [closedEmbed],
-                    components: [],
-                });
-            } catch (error) {
-                logger.debug('Help menu close edit failed (interaction may have expired):', error?.message);
-            }
-        }, HELP_MENU_TIMEOUT_MS);
-    },
-};
+    embed = discord.Embed(
+        title=f"👤 {member.display_name}",
+        description="User information"
+    )
+
+    embed.add_field(
+        name="Username",
+        value=str(member),
+        inline=True
+    )
+
+    embed.add_field(
+        name="ID",
+        value=str(member.id),
+        inline=True
+    )
+
+    embed.add_field(
+        name="Joined Server",
+        value=member.joined_at.strftime("%Y-%m-%d")
+        if member.joined_at else "Unknown",
+        inline=False
+    )
+
+    embed.set_thumbnail(url=member.display_avatar.url)
+
+    await ctx.send(embed=embed)
+
+
+# =========================
+# AVATAR
+# =========================
+
+@bot.command()
+async def avatar(ctx, member: discord.Member = None):
+    member = member or ctx.author
+
+    embed = discord.Embed(
+        title=f"🖼️ {member.display_name}'s Avatar"
+    )
+
+    embed.set_image(url=member.display_avatar.url)
+
+    await ctx.send(embed=embed)
+
+
+# =========================
+# SAY
+# =========================
+
+@bot.command()
+async def say(ctx, *, message):
+    await ctx.send(message)
+
+
+# =========================
+# EMBED
+# =========================
+
+@bot.command()
+async def embed(ctx, *, message):
+    e = discord.Embed(
+        description=message
+    )
+
+    await ctx.send(embed=e)
+
+
+# =========================
+# VC COMMAND
+# =========================
+
+@bot.group(invoke_without_command=True)
+@commands.has_permissions(manage_channels=True)
+async def vc(ctx):
+    await ctx.send(
+        "🔊 **VC Commands**\n\n"
+        "`-vc setup` — Create the VC system\n"
+        "`-vc create` — Create a personal VC"
+    )
+
+
+# =========================
+# VC SETUP
+# =========================
+
+@vc.command(name="setup")
+@commands.has_permissions(manage_channels=True)
+async def vc_setup(ctx):
+
+    guild = ctx.guild
+
+    # Check if setup already exists
+    existing_category = discord.utils.get(
+        guild.categories,
+        name="VOICE"
+    )
+
+    if existing_category:
+        await ctx.send("⚠️ The VC system is already set up.")
+        return
+
+    category = await guild.create_category("VOICE")
+
+    await guild.create_voice_channel(
+        "➕ Join To Create",
+        category=category
+    )
+
+    await ctx.send(
+        "✅ **VC system created!**\n"
+        "Use `-vc create` to create your own voice channel."
+    )
+
+
+# =========================
+# VC CREATE
+# =========================
+
+@vc.command(name="create")
+@commands.has_permissions(manage_channels=True)
+async def vc_create(ctx):
+
+    guild = ctx.guild
+
+    category = discord.utils.get(
+        guild.categories,
+        name="VOICE"
+    )
+
+    if category is None:
+        await ctx.send(
+            "❌ VC system isn't set up yet.\n"
+            "Use `-vc setup` first."
+        )
+        return
+
+    channel = await guild.create_voice_channel(
+        f"🔊 {ctx.author.display_name}'s VC",
+        category=category
+    )
+
+    await ctx.send(
+        f"✅ Created {channel.mention}"
+    )
+
+
+# =========================
+# HELP
+# =========================
+
+@bot.command()
+async def help(ctx):
+
+    embed = discord.Embed(
+        title="🤖 Bot Help",
+        description=(
+            "Simple commands and how to use them.\n"
+            "Prefix: `-`"
+        )
+    )
+
+    embed.add_field(
+        name="🏓 Basic Commands",
+        value=(
+            "`-ping`\n"
+            "Check the bot's response time.\n\n"
+            "`-uptime`\n"
+            "See how long the bot has been online."
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="👤 User Commands",
+        value=(
+            "`-user`\n"
+            "Shows your user information.\n\n"
+            "`-user @user`\n"
+            "Shows another user's information.\n\n"
+            "`-avatar`\n"
+            "Shows your avatar.\n\n"
+            "`-avatar @user`\n"
+            "Shows another user's avatar."
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🏠 Server Commands",
+        value=(
+            "`-server`\n"
+            "Shows basic server information."
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="💬 Message Commands",
+        value=(
+            "`-say <message>`\n"
+            "Makes the bot send your message.\n"
+            "Example: `-say welcome everyone`\n\n"
+            "`-embed <message>`\n"
+            "Sends your message inside an embed.\n"
+            "Example: `-embed welcome to the server`"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🔊 Voice Commands",
+        value=(
+            "`-vc`\n"
+            "Shows VC commands.\n\n"
+            "`-vc setup`\n"
+            "Creates the VOICE category and Join To Create channel.\n\n"
+            "`-vc create`\n"
+            "Creates a personal voice channel."
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="📖 Getting Started",
+        value=(
+            "**1.** Use `-help` to see commands.\n"
+            "**2.** Use `-vc setup` to set up voice channels.\n"
+            "**3.** Use `-vc create` to create a VC.\n"
+            "**4.** Use `-server` for server info.\n"
+            "**5.** Use `-user @user` for user info."
+        ),
+        inline=False
+    )
+
+    embed.set_footer(
+        text="Simple Utility Bot • Prefix: -"
+    )
+
+    await ctx.send(embed=embed)
+
+
+# =========================
+# ERROR HANDLING
+# =========================
+
+@bot.event
+async def on_command_error(ctx, error):
+
+    if isinstance(error, commands.CommandNotFound):
+        return
+
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send(
+            "❌ You don't have permission to use this command."
+        )
+        return
+
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(
+            "❌ You're missing something.\n"
+            "Use `-help` to see how to use the command."
+        )
+        return
+
+    print(f"Command error: {error}")
+
+
+# =========================
+# START BOT
+# =========================
+
+bot.run("YOUR_BOT_TOKEN")
+```
