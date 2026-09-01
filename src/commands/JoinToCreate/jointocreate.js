@@ -1,250 +1,120 @@
-// commands/vc.js
-
+```js
 import {
-    PermissionFlagsBits
-} from "discord.js";
+    Client,
+    GatewayIntentBits,
+    ChannelType,
+} from 'discord.js';
 
-import {
-    getTemporaryChannel,
-    banUserFromTemporaryChannel
-} from "../services/joinToCreateService.js";
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates,
+    ],
+});
 
-export default {
-    name: "vc",
-    aliases: ["voice"],
+// =========================
+// SETTINGS
+// =========================
 
-    async execute(message, args) {
-        if (!message.guild) return;
+const VC_CATEGORY = 'VOICE';
+const JOIN_CHANNEL = 'Join To Create';
 
-        const member = message.member;
+// =========================
+// READY
+// =========================
 
-        if (!member?.voice?.channel) {
-            return message.reply(
-                "❌ You need to be inside a temporary VC."
-            );
+client.once('ready', () => {
+    console.log(`Logged in as ${client.user.tag}`);
+});
+
+// =========================
+// JOIN TO CREATE
+// =========================
+
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    try {
+        // User did not join a new channel
+        if (!newState.channelId) return;
+
+        // User joined something other than Join To Create
+        if (newState.channel.name !== JOIN_CHANNEL) return;
+
+        const guild = newState.guild;
+        const member = newState.member;
+
+        // Find the VOICE category
+        let category = guild.channels.cache.find(
+            channel =>
+                channel.type === ChannelType.GuildCategory &&
+                channel.name === VC_CATEGORY
+        );
+
+        // Create category if it doesn't exist
+        if (!category) {
+            category = await guild.channels.create({
+                name: VC_CATEGORY,
+                type: ChannelType.GuildCategory,
+            });
         }
 
-        const voiceChannel =
-            member.voice.channel;
+        // Create personal VC
+        const channel = await guild.channels.create({
+            name: `🔊 ${member.displayName}'s VC`,
+            type: ChannelType.GuildVoice,
+            parent: category.id,
+        });
 
-        const tempChannel =
-            getTemporaryChannel(
-                message.guild.id,
-                voiceChannel.id
-            );
+        // Move member into their new VC
+        await member.voice.setChannel(channel);
 
-        if (!tempChannel) {
-            return message.reply(
-                "❌ This isn't a temporary Join to Create VC."
-            );
-        }
+        console.log(
+            `Created VC ${channel.name} for ${member.user.tag}`
+        );
 
-        /*
-        ==========================================
-        OWNER CHECK
-        ==========================================
-        */
+    } catch (error) {
+        console.error('Join To Create Error:', error);
+    }
+});
 
-        const isVCOwner =
-            tempChannel.ownerId === message.author.id;
+// =========================
+// AUTO DELETE EMPTY VCS
+// =========================
 
-        const isServerOwner =
-            message.guild.ownerId === message.author.id;
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    try {
+        const channel = oldState.channel;
 
-        if (!isVCOwner && !isServerOwner) {
-            return message.reply(
-                "❌ Only the **VC owner** or **server owner** can manage this VC."
-            );
-        }
+        if (!channel) return;
 
-        const action =
-            args[0]?.toLowerCase();
-
-        /*
-        ==========================================
-        HELP
-        ==========================================
-        */
-
-        if (!action) {
-            return message.reply(
-                [
-                    "**VC Commands**",
-                    "`-vc kick @user` — Kick someone from your VC",
-                    "`-vc reject @user` — Reject someone from your VC",
-                    "`-vc ban @user` — Ban someone from your VC"
-                ].join("\n")
-            );
-        }
-
-        /*
-        ==========================================
-        GET TARGET
-        ==========================================
-        */
-
-        const target =
-            message.mentions.members.first();
-
-        if (!target) {
-            return message.reply(
-                `❌ Usage: \`-vc ${action} @user\``
-            );
-        }
-
-        /*
-        Don't allow the owner to target themselves.
-        */
-
-        if (target.id === message.author.id) {
-            return message.reply(
-                "❌ You can't use this on yourself."
-            );
-        }
-
-        /*
-        Make sure they're actually in this VC.
-        */
-
+        // Only look at channels inside the VOICE category
         if (
-            !voiceChannel.members.has(
-                target.id
-            )
+            channel.parent?.name !== VC_CATEGORY
         ) {
-            return message.reply(
-                "❌ That user isn't in your VC."
-            );
+            return;
         }
 
-        /*
-        ==========================================
-        KICK
-        ==========================================
-        */
-
-        if (action === "kick") {
-
-            if (
-                !message.guild.members.me.permissions.has(
-                    PermissionFlagsBits.MoveMembers
-                )
-            ) {
-                return message.reply(
-                    "❌ I need the **Move Members** permission."
-                );
-            }
-
-            await target.voice.disconnect(
-                `JTC VC kick by ${message.author.tag}`
-            );
-
-            return message.reply(
-                `🚪 ${target.user.tag} was kicked from your VC.`
-            );
+        // Never delete Join To Create
+        if (channel.name === JOIN_CHANNEL) {
+            return;
         }
 
-        /*
-        ==========================================
-        REJECT
-        ==========================================
-        */
-
-        if (action === "reject") {
-
-            if (
-                !message.guild.members.me.permissions.has(
-                    PermissionFlagsBits.ManageChannels
-                )
-            ) {
-                return message.reply(
-                    "❌ I need the **Manage Channels** permission."
-                );
-            }
-
-            /*
-            Remove their ability to connect
-            to this temporary VC.
-            */
-
-            await voiceChannel.permissionOverwrites.edit(
-                target.id,
-                {
-                    Connect: false
-                },
-                {
-                    reason:
-                        `JTC VC reject by ${message.author.tag}`
-                }
-            );
-
-            await target.voice.disconnect(
-                `JTC VC reject by ${message.author.tag}`
-            ).catch(() => {});
-
-            return message.reply(
-                `🚫 ${target.user.tag} was rejected from your VC.`
-            );
+        // Delete when empty
+        if (channel.members.size === 0) {
+            await channel.delete().catch(() => {});
         }
 
-        /*
-        ==========================================
-        BAN
-        ==========================================
-        */
-
-        if (action === "ban") {
-
-            if (
-                !message.guild.members.me.permissions.has(
-                    PermissionFlagsBits.ManageChannels
-                )
-            ) {
-                return message.reply(
-                    "❌ I need the **Manage Channels** permission."
-                );
-            }
-
-            banUserFromTemporaryChannel(
-                message.guild.id,
-                voiceChannel.id,
-                target.id
-            );
-
-            /*
-            Permanently prevent them from
-            connecting to THIS temporary VC
-            while it exists.
-            */
-
-            await voiceChannel.permissionOverwrites.edit(
-                target.id,
-                {
-                    Connect: false,
-                    ViewChannel: false
-                },
-                {
-                    reason:
-                        `JTC VC ban by ${message.author.tag}`
-                }
-            );
-
-            await target.voice.disconnect(
-                `JTC VC ban by ${message.author.tag}`
-            ).catch(() => {});
-
-            return message.reply(
-                `🔨 ${target.user.tag} was banned from your VC.`
-            );
-        }
-
-        /*
-        ==========================================
-        UNKNOWN COMMAND
-        ==========================================
-        */
-
-        return message.reply(
-            "❌ Unknown VC command. Use `-vc kick`, `-vc reject`, or `-vc ban`."
+    } catch (error) {
+        console.error(
+            'VC Auto Delete Error:',
+            error
         );
     }
-};
+});
+
+// =========================
+// LOGIN
+// =========================
+
+client.login('YOUR_BOT_TOKEN');
+```
