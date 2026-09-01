@@ -1,51 +1,65 @@
-```js
-import { ChannelType, PermissionFlagsBits } from 'discord.js';
+`const prefix = '-';
 
-export default {
-    name: 'vc-setup',
-    description: 'Setup the Join To Create system',
+client.on('messageCreate', async message => {
+    if (message.author.bot) return;
+    if (!message.content.startsWith(prefix)) return;
 
-    async execute(message) {
-        if (!message.member.permissions.has(
-            PermissionFlagsBits.ManageChannels
-        )) {
-            return message.reply(
-                'You need Manage Channels to use this command.'
-            );
-        }
+    const args = message.content
+        .slice(prefix.length)
+        .trim()
+        .split(/\s+/);
 
-        let category = message.guild.channels.cache.find(
-            channel =>
-                channel.type === ChannelType.GuildCategory &&
-                channel.name === 'VOICE'
-        );
+    const command = args.shift()?.toLowerCase();
 
-        if (!category) {
-            category = await message.guild.channels.create({
-                name: 'VOICE',
-                type: ChannelType.GuildCategory
-            });
-        }
+    if (command !== 'vc') return;
 
-        let joinChannel = message.guild.channels.cache.find(
-            channel =>
-                channel.type === ChannelType.GuildVoice &&
-                channel.name === 'Join To Create' &&
-                channel.parentId === category.id
-        );
+    const subcommand = args.shift()?.toLowerCase();
 
-        if (!joinChannel) {
-            joinChannel = await message.guild.channels.create({
-                name: 'Join To Create',
-                type: ChannelType.GuildVoice,
-                parent: category.id
-            });
-        }
-
-        return message.reply(
-            'VC system setup complete.\n' +
-            'Join the Join To Create channel to create your personal VC.'
-        );
+    if (subcommand === 'setup') {
+        // setup code
     }
-};
-```
+
+    if (subcommand === 'create') {
+        // create code
+    }
+
+    if (subcommand === 'delete') {
+        // delete code
+    }
+
+    if (subcommand === 'rename') {
+        // rename code
+    }
+
+    if (subcommand === 'limit') {
+        // limit code
+    }
+
+    if (subcommand === 'lock') {
+        // lock code
+    }
+
+    if (subcommand === 'unlock') {
+        // unlock code
+    }
+
+    if (subcommand === 'stfu') {
+        // stfu code
+    }
+
+    if (subcommand === 'unstfu') {
+        // unstfu code
+    }
+
+    if (subcommand === 'kick') {
+        // kick code
+    }
+
+    if (subcommand === 'transfer') {
+        // transfer code
+    }
+
+    if (subcommand === 'info') {
+        // info code
+    }
+});
